@@ -1,10 +1,7 @@
 
 import streamlit as st
 from groq import Groq
-
-# --------------------------------
-# 1. PAGE CONFIGURATION
-# --------------------------------
+from datetime import datetime
 
 st.set_page_config(
     page_title="AI Interview Assistant",
@@ -13,72 +10,68 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --------------------------------
-# 2. CUSTOM STYLING
-# --------------------------------
-
 st.markdown("""
 <style>
-.main {
-    background-color: #0E1117;
+.stApp {
+    background: #0b0d12;
 }
-
-.stButton > button {
-    background-color: #FF4B4B;
+[data-testid="stSidebar"] {
+    background: #12151d;
+}
+.main-title {
+    font-size: 42px;
+    font-weight: 800;
+    color: #ff4b4b;
+}
+.subtitle {
+    color: #aab0bd;
+    font-size: 16px;
+}
+div.stButton > button {
+    background: #ff4b4b;
     color: white;
-    border-radius: 10px;
-    height: 45px;
-    font-weight: bold;
-    width: 100%;
+    border: none;
+    border-radius: 9px;
+    font-weight: 700;
+    min-height: 43px;
 }
-
-.stButton > button:hover {
-    background-color: #D93636;
+div.stButton > button:hover {
+    background: #d93636;
     color: white;
 }
-
-h1 {
-    color: #FF4B4B;
+.metric-card {
+    background: #171b26;
+    padding: 18px;
+    border-radius: 12px;
+    border: 1px solid #292f3d;
 }
-
 </style>
 """, unsafe_allow_html=True)
 
-# --------------------------------
-# 3. HEADER
-# --------------------------------
+if "questions" not in st.session_state:
+    st.session_state.questions = ""
 
-st.title("🎯 AI Interview Assistant")
+if "feedback" not in st.session_state:
+    st.session_state.feedback = ""
 
-st.caption(
-    "Practice interviews with AI-generated questions "
-    "and constructive feedback."
-)
+if "history" not in st.session_state:
+    st.session_state.history = []
 
-st.caption("Developed by: ASHRAF ALI 😉")
-
-st.divider()
-
-# --------------------------------
-# 4. GROQ API CONNECTION
-# --------------------------------
+if "client" not in st.session_state:
+    st.session_state.client = None
 
 try:
-    api_key = st.secrets["GROQ_API_KEY"]
-    client = Groq(api_key=api_key)
-
-except (KeyError, FileNotFoundError):
-    st.error(
-        "GROQ_API_KEY is missing. "
-        "Add it to Streamlit Cloud → App Settings → Secrets."
+    st.session_state.client = Groq(
+        api_key=st.secrets["GROQ_API_KEY"]
     )
+except (KeyError, FileNotFoundError):
+    st.error("GROQ_API_KEY is missing. Configure it in Streamlit Secrets.")
     st.stop()
 
-# --------------------------------
-# 5. SIDEBAR SETTINGS
-# --------------------------------
+client = st.session_state.client
 
-st.sidebar.title("⚙️ Interview Settings")
+st.sidebar.title("🎯 Interview Studio")
+st.sidebar.caption("Customize your AI interview")
 
 role = st.sidebar.selectbox(
     "Select Job Role",
@@ -87,24 +80,23 @@ role = st.sidebar.selectbox(
         "Java Developer",
         "Data Analyst",
         "Machine Learning Engineer",
-        "Software Engineer",
-        "HR Executive",
         "AI Engineer",
-        "Data Scientist"
+        "Data Scientist",
+        "Software Engineer",
+        "Frontend Developer",
+        "Backend Developer",
+        "HR Executive"
     ]
 )
 
-difficulty = st.sidebar.selectbox(
-    "Select Difficulty Level",
-    [
-        "Beginner 😊",
-        "Intermediate 😎",
-        "Advanced 😤"
-    ]
+difficulty = st.sidebar.select_slider(
+    "Difficulty Level",
+    options=["Beginner", "Intermediate", "Advanced"],
+    value="Intermediate"
 )
 
 experience = st.sidebar.selectbox(
-    "Select Experience Level",
+    "Experience Level",
     [
         "Fresher",
         "0-1 Years",
@@ -116,164 +108,284 @@ experience = st.sidebar.selectbox(
 
 question_count = st.sidebar.slider(
     "Number of Questions",
-    min_value=5,
-    max_value=20,
-    value=5,
+    5,
+    20,
+    5,
     step=5
 )
 
 topics = st.sidebar.multiselect(
-    "Select Technical Topics",
+    "Technical Topics",
     [
         "Python",
+        "Java",
         "OOP",
-        "Data Structures",
+        "DSA",
         "SQL",
         "Machine Learning",
         "Deep Learning",
         "Statistics",
-        "Problem Solving"
+        "Data Analysis",
+        "Problem Solving",
+        "Communication Skills"
     ],
     default=["Python", "OOP"]
 )
 
-include_answers = st.sidebar.checkbox(
+include_answers = st.sidebar.toggle(
     "Include Expected Answers",
     value=True
 )
 
-# --------------------------------
-# 6. MAIN INTERFACE
-# --------------------------------
+st.sidebar.divider()
 
-st.subheader("🚀 Generate Your Interview")
+st.sidebar.subheader("📊 Interview Statistics")
+st.sidebar.metric("Interviews Generated", len(st.session_state.history))
 
-col1, col2 = st.columns(2)
-
-with col1:
-    st.info(f"**Selected Role:** {role}")
-
-with col2:
-    st.info(f"**Difficulty:** {difficulty}")
-
-st.write(
-    "Customize your interview settings from the sidebar "
-    "and generate questions using AI."
+st.markdown(
+    '<div class="main-title">🎯 AI Interview Assistant</div>',
+    unsafe_allow_html=True
 )
 
-# --------------------------------
-# 7. SESSION STATE
-# --------------------------------
+st.markdown(
+    '<div class="subtitle">Your personal AI-powered technical interview preparation platform.</div>',
+    unsafe_allow_html=True
+)
 
-if "interview_result" not in st.session_state:
-    st.session_state.interview_result = None
-
-# --------------------------------
-# 8. GENERATE INTERVIEW QUESTIONS
-# --------------------------------
-
-if st.button("🚀 Generate Interview Questions"):
-
-    if not topics:
-        st.warning("Please select at least one technical topic.")
-
-    else:
-
-        prompt = f"""
-        You are a professional technical interviewer.
-
-        Generate {question_count} interview questions.
-
-        Job Role: {role}
-        Difficulty Level: {difficulty}
-        Candidate Experience: {experience}
-        Technical Topics: {", ".join(topics)}
-
-        Instructions:
-
-        1. Generate relevant interview questions.
-        2. Arrange questions from easy to difficult.
-        3. Include practical and real-world scenarios.
-        4. Avoid repeating questions.
-
-        {"5. Provide a clear expected answer after every question." if include_answers else "5. Generate questions only without answers."}
-
-        Format the response professionally using:
-
-        Question 1:
-        Question:
-
-        Expected Answer:
-        (If requested)
-
-        Keep answers simple, accurate and understandable.
-        """
-
-        try:
-
-            with st.spinner(
-                "🤖 AI is preparing your interview questions..."
-            ):
-
-                response = client.chat.completions.create(
-                    model="openai/gpt-oss-120b",
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": (
-                                "You are an experienced technical "
-                                "interviewer and career mentor."
-                            )
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-                    temperature=0.7,
-                    max_completion_tokens=5000
-                )
-
-                output = response.choices[0].message.content
-
-                st.session_state.interview_result = output
-
-        except Exception as e:
-
-            st.error(f"Something went wrong: {e}")
-
-# --------------------------------
-# 9. DISPLAY RESULTS
-# --------------------------------
-
-if st.session_state.interview_result:
-
-    st.divider()
-
-    st.subheader("📋 Your Generated Interview Questions")
-
-    st.markdown(st.session_state.interview_result)
-
-    # Download questions
-
-    st.download_button(
-        label="⬇️ Download Interview Questions",
-        data=st.session_state.interview_result,
-        file_name="AI_Interview_Questions.txt",
-        mime="text/plain"
-    )
-
-    if st.button("🔄 Generate New Interview"):
-        st.session_state.interview_result = None
-        st.rerun()
-
-# --------------------------------
-# 10. FOOTER
-# --------------------------------
+st.caption("Developed by ASHRAF ALI 😉")
 
 st.divider()
 
-st.caption(
-    "© 2026 AI Interview Assistant | Built with Python, "
-    "Streamlit and Groq API | Ashraf Ali"
+tab1, tab2, tab3 = st.tabs([
+    "🚀 Generate Interview",
+    "🧠 Answer Evaluation",
+    "📈 Interview History"
+])
+
+with tab1:
+
+    st.subheader("Configure Your Interview")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown("**💼 Job Role**")
+        st.info(role)
+
+    with col2:
+        st.markdown("**⚡ Difficulty**")
+        st.info(difficulty)
+
+    with col3:
+        st.markdown("**🎓 Experience**")
+        st.info(experience)
+
+    if st.button("🚀 Generate Interview Questions", use_container_width=True):
+
+        if not topics:
+            st.warning("Please select at least one technical topic.")
+
+        else:
+            prompt = f"""
+You are a senior technical interviewer and career mentor.
+
+Create {question_count} unique interview questions.
+
+Job Role: {role}
+Difficulty: {difficulty}
+Experience: {experience}
+Topics: {", ".join(topics)}
+
+Requirements:
+1. Include conceptual questions.
+2. Include practical coding questions where relevant.
+3. Include real-world scenario questions.
+4. Arrange questions from easy to difficult.
+5. Avoid duplicate questions.
+6. Make questions relevant to the selected experience level.
+
+{"Include detailed expected answers after each question." if include_answers else "Generate questions only without answers."}
+
+Use clear numbering and professional formatting.
+"""
+
+            try:
+                with st.spinner("🤖 AI is preparing your interview..."):
+
+                    response = client.chat.completions.create(
+                        model="openai/gpt-oss-120b",
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": "You are an expert technical interviewer."
+                            },
+                            {
+                                "role": "user",
+                                "content": prompt
+                            }
+                        ],
+                        temperature=0.7,
+                        max_completion_tokens=5000
+                    )
+
+                    result = response.choices[0].message.content
+
+                    st.session_state.questions = result
+                    st.session_state.feedback = ""
+
+                    st.session_state.history.append({
+                        "role": role,
+                        "difficulty": difficulty,
+                        "date": datetime.now().strftime("%d-%m-%Y %H:%M"),
+                        "questions": result
+                    })
+
+                    st.success("Interview questions generated successfully!")
+
+            except Exception as e:
+                st.error(f"Generation failed: {str(e)}")
+
+    if st.session_state.questions:
+
+        st.divider()
+        st.subheader("📋 Generated Interview Questions")
+
+        st.markdown(st.session_state.questions)
+
+        st.download_button(
+            "⬇️ Download Interview Questions",
+            data=st.session_state.questions,
+            file_name="AI_Interview_Questions.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
+
+with tab2:
+
+    st.subheader("🧠 AI Answer Evaluation")
+
+    st.write(
+        "Submit your interview answer and let AI evaluate your technical knowledge."
+    )
+
+    question = st.text_area(
+        "Interview Question",
+        placeholder="Enter the interview question here...",
+        height=100
+    )
+
+    answer = st.text_area(
+        "Your Answer",
+        placeholder="Write your answer here...",
+        height=200
+    )
+
+    if st.button("📊 Evaluate My Answer", use_container_width=True):
+
+        if not question.strip() or not answer.strip():
+            st.warning("Please enter both the question and your answer.")
+
+        else:
+
+            evaluation_prompt = f"""
+You are a strict but supportive professional technical interviewer.
+
+Evaluate the candidate's answer.
+
+Job Role: {role}
+Difficulty: {difficulty}
+
+Question:
+{question}
+
+Candidate Answer:
+{answer}
+
+Provide the following evaluation:
+
+1. Score out of 10.
+2. Technical accuracy.
+3. Strengths.
+4. Missing concepts.
+5. Mistakes or misunderstandings.
+6. Improved sample answer.
+7. Suggestions to improve.
+
+Be accurate, constructive and specific.
+Do not award high marks for incorrect or incomplete answers.
+"""
+
+            try:
+                with st.spinner("🔍 AI is evaluating your answer..."):
+
+                    response = client.chat.completions.create(
+                        model="openai/gpt-oss-120b",
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": "You are an experienced technical interviewer and evaluator."
+                            },
+                            {
+                                "role": "user",
+                                "content": evaluation_prompt
+                            }
+                        ],
+                        temperature=0.4,
+                        max_completion_tokens=2500
+                    )
+
+                    feedback = response.choices[0].message.content
+
+                    st.session_state.feedback = feedback
+
+                st.success("Answer evaluation completed!")
+
+            except Exception as e:
+                st.error(f"Evaluation failed: {str(e)}")
+
+    if st.session_state.feedback:
+
+        st.divider()
+        st.subheader("📈 Your Performance Report")
+
+        st.markdown(st.session_state.feedback)
+
+        st.download_button(
+            "⬇️ Download Evaluation",
+            data=st.session_state.feedback,
+            file_name="Interview_Evaluation.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
+
+with tab3:
+
+    st.subheader("📈 Interview History")
+
+    if st.session_state.history:
+
+        for index, item in enumerate(reversed(st.session_state.history), 1):
+
+            with st.expander(
+                f"Interview {index} | {item['role']} | {item['date']}"
+            ):
+
+                st.write("**Job Role:**", item["role"])
+                st.write("**Difficulty:**", item["difficulty"])
+                st.markdown(item["questions"])
+
+    else:
+        st.info("No interviews generated yet.")
+
+    if st.session_state.history:
+
+        if st.button("🗑️ Clear Interview History"):
+            st.session_state.history = []
+            st.rerun()
+
+st.divider()
+
+st.markdown(
+    "<center>Built with ❤️ using Python, Streamlit and Groq AI</center>",
+    unsafe_allow_html=True
 )
