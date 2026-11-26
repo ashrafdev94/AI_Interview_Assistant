@@ -18,7 +18,7 @@ role = st.selectbox("select Job Role",[
     "Software Engineer",
     "HR Executive"
 ]) 
-diff = st.selectbox("select Difficulty level",[
+diff = st.selectbox("Select Difficulty level",[
     "Beginner",
     "Intermediate",
     "Advance",
