@@ -18,6 +18,11 @@ role = st.selectbox("select Job Role",[
     "Software Engineer",
     "HR Executive"
 ]) 
+role2 = st.selectbox("select Difficulty level",[
+    "Beginner",
+    "Intermediate",
+    "Difficulty",
+]) 
 if st.button("Generate Interview Questions"):
 
     prompt = "Generate 5 interview questions for the role of " + role
